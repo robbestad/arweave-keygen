@@ -81,6 +81,36 @@ println!("{}", wallet.to_json()?);     // { address, jwk }
 
 It does not send AR, sign transactions, or talk to a gateway. It only creates a wallet. It does not derive keys from a BIP39 mnemonic — those schemes are not interoperable across Arweave tools. This matches the original Arweave keyfile: one random RSA-4096 pair, one address.
 
+## Copy-paste for LLMs
+
+```
+You are using arweave-keygen (https://github.com/robbestad/arweave-keygen).
+
+It generates an Arweave wallet locally: one random RSA-4096 key pair as a canonical JWK keyfile. It does not talk to the network, sign transactions, send AR, or derive keys from a BIP39 mnemonic.
+
+Protocol (required or the network rejects the key):
+- RSA-4096, public exponent 65537 (JWK e = "AQAB")
+- JWK fields: kty, e, n, d, p, q, dp, dq, qi
+- Address = base64url(SHA-256(n bytes)), 43 characters, no padding
+- The JWK is the private key. There is no recovery phrase.
+
+CLI (always --release; debug RSA-4096 is slow):
+  cargo install --path .
+  arweave-keygen
+  arweave-keygen -o ./wallet.json
+  arweave-keygen --json
+
+Default file: arweave-keyfile-<address>.json, mode 0600, never overwrites.
+--json prints { "address", "jwk" } on stdout and skips the file unless -o is also set.
+
+Rust:
+  use arweave_keygen::Wallet;
+  let w = Wallet::generate()?;
+  w.address; w.to_jwk_json()?; w.to_json()?;
+
+Import the keyfile in ArConnect, arweave.app, or arweave-js. Do not print the JWK unless the user asked. Treat it as a secret.
+```
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
