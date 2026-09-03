@@ -1,4 +1,4 @@
-# arweave-wallet
+# arweave-keygen
 
 Generate an Arweave wallet on your own machine, in about a second, without a browser, a website, or Node.js.
 
