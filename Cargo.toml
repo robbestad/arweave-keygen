@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Generate an Arweave RSA-4096 JWK wallet locally"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/robbestad/arweave-keygen"
+homepage = "https://github.com/robbestad/arweave-keygen"
+documentation = "https://docs.rs/arweave-keygen"
+authors = ["Sven Anders Robbestad"]
+keywords = ["arweave", "wallet", "jwk", "keygen", "cryptography"]
+categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]
 base64 = "0.22"

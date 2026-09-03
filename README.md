@@ -21,16 +21,17 @@ Arweave keys are not a 12-word seed. They are a **4096-bit RSA key pair** stored
 ## Install
 
 ```bash
-cargo install --path .
+cargo install arweave-keygen
 ```
 
-Or run from the repo:
+From this repo:
 
 ```bash
+cargo install --path .
 cargo run --release
 ```
 
-Always use `--release`. Debug builds spend most of their time in big-integer math.
+Always use `--release` when running from source. Debug builds spend most of their time in big-integer math.
 
 ## Usage
 
@@ -95,7 +96,7 @@ Protocol (required or the network rejects the key):
 - The JWK is the private key. There is no recovery phrase.
 
 CLI (always --release; debug RSA-4096 is slow):
-  cargo install --path .
+  cargo install arweave-keygen
   arweave-keygen
   arweave-keygen -o ./wallet.json
   arweave-keygen --json
