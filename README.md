@@ -44,6 +44,17 @@ arweave-keygen -o ./wallet.json
 
 # Print address + JWK as JSON (no file, unless you also pass -o)
 arweave-keygen --json
+
+# Print only the receiving address from an existing JWK keyfile
+arweave-keygen address ./wallet.json
+```
+
+`address` writes only the address to standard output, so it is safe to use when
+you need a recipient address without exposing the private JWK:
+
+```bash
+arweave-keygen address ./wallet.json
+# z5gK4f7xkSKEdwKKuY_ly27cAzCzu9wgrcM-JuJLCjA
 ```
 
 `--json` output:
@@ -100,9 +111,11 @@ CLI (always --release; debug RSA-4096 is slow):
   arweave-keygen
   arweave-keygen -o ./wallet.json
   arweave-keygen --json
+  arweave-keygen address ./wallet.json
 
 Default file: arweave-keyfile-<address>.json, mode 0600, never overwrites.
 --json prints { "address", "jwk" } on stdout and skips the file unless -o is also set.
+`address KEYFILE` prints only the address derived from an existing JWK keyfile.
 
 Rust:
   use arweave_keygen::Wallet;
