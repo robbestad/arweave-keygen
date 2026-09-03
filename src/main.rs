@@ -1,4 +1,4 @@
-use arweave_wallet::Wallet;
+use arweave_keygen::Wallet;
 use clap::Parser;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(
-    name = "arweave-wallet",
+    name = "arweave-keygen",
     about = "Generate an Arweave RSA-4096 JWK wallet",
     long_about = "Creates a new Arweave wallet: a 4096-bit RSA key pair in JWK form \
 (public exponent 65537). The keyfile is the private key — keep it secret and back it up."

@@ -36,13 +36,13 @@ Always use `--release`. Debug builds spend most of their time in big-integer mat
 
 ```bash
 # Write arweave-keyfile-<address>.json in the current directory
-arweave-wallet
+arweave-keygen
 
 # Choose the path
-arweave-wallet -o ./wallet.json
+arweave-keygen -o ./wallet.json
 
 # Print address + JWK as JSON (no file, unless you also pass -o)
-arweave-wallet --json
+arweave-keygen --json
 ```
 
 `--json` output:
@@ -69,7 +69,7 @@ The JWK **is** the private key. Anyone with that file can spend the wallet’s A
 ## Library
 
 ```rust
-use arweave_wallet::Wallet;
+use arweave_keygen::Wallet;
 
 let wallet = Wallet::generate()?;
 println!("{}", wallet.address);
