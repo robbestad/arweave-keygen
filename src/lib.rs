@@ -20,7 +20,7 @@ pub const PUBLIC_EXPONENT: u64 = 65537;
 /// Arweave RSA private key in JWK form (RFC 7517 / RFC 7518).
 ///
 /// Field order matches the canonical Arweave keyfile shape.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Jwk {
     pub kty: String,
     pub e: String,
@@ -31,6 +31,22 @@ pub struct Jwk {
     pub dp: String,
     pub dq: String,
     pub qi: String,
+}
+
+impl std::fmt::Debug for Jwk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Jwk")
+            .field("kty", &self.kty)
+            .field("e", &self.e)
+            .field("n", &self.n)
+            .field("d", &"[REDACTED]")
+            .field("p", &"[REDACTED]")
+            .field("q", &"[REDACTED]")
+            .field("dp", &"[REDACTED]")
+            .field("dq", &"[REDACTED]")
+            .field("qi", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// A generated Arweave wallet: address plus JWK private key.
@@ -104,6 +120,28 @@ impl Wallet {
         if jwk.e != "AQAB" {
             return Err(Error::InvalidKey("public exponent e must be 65537 (AQAB)"));
         }
+        let n = decode_jwk_integer(&jwk.n)?;
+        if n.bits() != KEY_BITS {
+            return Err(Error::InvalidKey("modulus must be 4096 bits"));
+        }
+        let d = decode_jwk_integer(&jwk.d)?;
+        let p = decode_jwk_integer(&jwk.p)?;
+        let q = decode_jwk_integer(&jwk.q)?;
+        let dp = decode_jwk_integer(&jwk.dp)?;
+        let dq = decode_jwk_integer(&jwk.dq)?;
+        let qi = decode_jwk_integer(&jwk.qi)?;
+        let one = BigUint::from(1u8);
+        let two = BigUint::from(2u8);
+        if d >= n || p <= two || q <= two || p == q || &p % &two != one || &q % &two != one {
+            return Err(Error::InvalidKey("invalid private RSA components"));
+        }
+        let key = RsaPrivateKey::from_components(n, BigUint::from(PUBLIC_EXPONENT), d, vec![p, q])?;
+        if key.dp() != Some(&dp)
+            || key.dq() != Some(&dq)
+            || key.crt_coefficient().as_ref() != Some(&qi)
+        {
+            return Err(Error::InvalidKey("CRT fields do not match the private key"));
+        }
         let address = address_from_n(&jwk.n)?;
         Ok(Self { address, jwk })
     }
@@ -174,9 +212,23 @@ pub fn b64url_encode(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Base64URL-decode a string (padding optional).
+/// Base64URL-decode a string without padding.
 pub fn b64url_decode(value: &str) -> Result<Vec<u8>, Error> {
     URL_SAFE_NO_PAD.decode(value).map_err(Error::from)
+}
+
+fn decode_jwk_integer(value: &str) -> Result<BigUint, Error> {
+    // Bound decoding and RSA arithmetic to the supported modulus size.
+    if value.len() > (KEY_BITS / 8 * 4).div_ceil(3) {
+        return Err(Error::InvalidKey("RSA component exceeds 4096 bits"));
+    }
+    let bytes = b64url_decode(value)?;
+    if bytes.is_empty() || bytes[0] == 0 {
+        return Err(Error::InvalidKey(
+            "RSA components must be positive, minimally encoded integers",
+        ));
+    }
+    Ok(BigUint::from_bytes_be(&bytes))
 }
 
 /// Wallet address from the JWK `n` field: `base64url(SHA-256(decode(n)))`.
@@ -215,9 +267,77 @@ mod tests {
         BigUint::from_bytes_be(&b64url_decode(value).unwrap())
     }
 
+    fn sample_wallet() -> Wallet {
+        static WALLET: std::sync::OnceLock<Wallet> = std::sync::OnceLock::new();
+        WALLET
+            .get_or_init(|| Wallet::generate().expect("RSA-4096 keygen"))
+            .clone()
+    }
+
+    #[test]
+    fn rejects_corrupt_import_components() {
+        let wallet = sample_wallet();
+        let original = serde_json::to_value(&wallet.jwk).unwrap();
+        for field in ["n", "d", "p", "q", "dp", "dq", "qi"] {
+            for invalid in ["", "!", "AA", "AQ", "Ag", "AQI=", "AAE"] {
+                let mut value = original.clone();
+                value[field] = invalid.into();
+                assert!(
+                    Wallet::from_jwk_json(&value.to_string()).is_err(),
+                    "accepted {field}={invalid}"
+                );
+            }
+            let mut value = original.clone();
+            let changed = jwk_int(original[field].as_str().unwrap()) + BigUint::from(2u8);
+            value[field] = b64url_encode(&changed.to_bytes_be()).into();
+            assert!(
+                Wallet::from_jwk_json(&value.to_string()).is_err(),
+                "accepted inconsistent {field}"
+            );
+        }
+        let mut jwk = wallet.jwk.clone();
+        jwk.e = "Aw".into();
+        assert!(Wallet::from_jwk(jwk).is_err());
+        let mut jwk = wallet.jwk.clone();
+        jwk.p = jwk.q.clone();
+        assert!(Wallet::from_jwk(jwk).is_err());
+        let mut jwk = wallet.jwk;
+        jwk.d = "A".repeat(684);
+        assert!(Wallet::from_jwk(jwk).is_err());
+    }
+
+    #[test]
+    fn debug_redacts_private_components() {
+        let wallet = sample_wallet();
+        for output in [
+            format!("{:?}", wallet.jwk),
+            format!("{:#?}", wallet.jwk),
+            format!("{:?}", wallet),
+            format!("{:#?}", wallet),
+        ] {
+            for secret in [
+                &wallet.jwk.d,
+                &wallet.jwk.p,
+                &wallet.jwk.q,
+                &wallet.jwk.dp,
+                &wallet.jwk.dq,
+                &wallet.jwk.qi,
+            ] {
+                assert!(!output.contains(secret));
+            }
+            assert!(output.contains("[REDACTED]"));
+        }
+    }
+
+    #[test]
+    fn base64_requires_no_padding() {
+        assert_eq!(b64url_decode("AQI").unwrap(), vec![1, 2]);
+        assert!(b64url_decode("AQI=").is_err());
+    }
+
     #[test]
     fn generate_wallet_is_valid_arweave_jwk() {
-        let wallet = Wallet::generate().expect("RSA-4096 keygen");
+        let wallet = sample_wallet();
 
         assert_eq!(wallet.jwk.kty, "RSA");
         assert_eq!(wallet.jwk.e, "AQAB");
