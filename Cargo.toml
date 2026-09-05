@@ -1,6 +1,6 @@
 [package]
 name = "arweave-keygen"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Generate an Arweave RSA-4096 JWK wallet locally"
 license = "MIT"
@@ -15,6 +15,7 @@ categories = ["command-line-utilities", "cryptography"]
 [dependencies]
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
+num-bigint-dig = { version = "0.8", default-features = false, features = ["prime"] }
 rand = "0.8"
 rsa = "0.9"
 serde = { version = "1", features = ["derive"] }
