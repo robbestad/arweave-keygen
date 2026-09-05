@@ -6,6 +6,7 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use num_bigint_dig::prime::probably_prime;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::{BigUint, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
@@ -134,6 +135,10 @@ impl Wallet {
         let two = BigUint::from(2u8);
         if d >= n || p <= two || q <= two || p == q || &p % &two != one || &q % &two != one {
             return Err(Error::InvalidKey("invalid private RSA components"));
+        }
+        // from_components checks n = p*q and CRT relations, not primality.
+        if !probably_prime(&p, 20) || !probably_prime(&q, 20) {
+            return Err(Error::InvalidKey("RSA factors p and q must be prime"));
         }
         let key = RsaPrivateKey::from_components(n, BigUint::from(PUBLIC_EXPONENT), d, vec![p, q])?;
         if key.dp() != Some(&dp)
@@ -304,6 +309,82 @@ mod tests {
         let mut jwk = wallet.jwk;
         jwk.d = "A".repeat(684);
         assert!(Wallet::from_jwk(jwk).is_err());
+    }
+
+    fn gcd(mut a: BigUint, mut b: BigUint) -> BigUint {
+        let zero = BigUint::from(0u8);
+        while b != zero {
+            let r = &a % &b;
+            a = b;
+            b = r;
+        }
+        a
+    }
+
+    /// Composite p, q with matching n, d and CRT fields so the old import
+    /// checks would accept the key.
+    fn composite_jwk() -> Jwk {
+        use num_bigint_dig::traits::ModInverse;
+
+        let e = BigUint::from(PUBLIC_EXPONENT);
+        let zero = BigUint::from(0u8);
+        for p_shift in 2040..=2050 {
+            for q_shift in 2040..=2050 {
+                for p_add in 1u32..30 {
+                    for q_add in 1u32..30 {
+                        if p_add % 2 == 0 || q_add % 2 == 0 {
+                            continue;
+                        }
+                        let p = BigUint::from(9u8)
+                            * ((BigUint::from(1u8) << p_shift) + BigUint::from(p_add));
+                        let q = BigUint::from(25u8)
+                            * ((BigUint::from(1u8) << q_shift) + BigUint::from(q_add));
+                        if p == q {
+                            continue;
+                        }
+                        let n = &p * &q;
+                        if n.bits() != KEY_BITS {
+                            continue;
+                        }
+                        let pm1 = &p - 1u8;
+                        let qm1 = &q - 1u8;
+                        if &pm1 % &e == zero || &qm1 % &e == zero {
+                            continue;
+                        }
+                        let g = gcd(pm1.clone(), qm1.clone());
+                        let lambda = &pm1 / g * &qm1;
+                        let Some(d) = e.clone().mod_inverse(&lambda).and_then(|v| v.to_biguint())
+                        else {
+                            continue;
+                        };
+                        let Some(qi) = q.clone().mod_inverse(&p).and_then(|v| v.to_biguint())
+                        else {
+                            continue;
+                        };
+                        let dp = &d % &pm1;
+                        let dq = &d % &qm1;
+                        return Jwk {
+                            kty: "RSA".into(),
+                            e: "AQAB".into(),
+                            n: b64url_encode(&n.to_bytes_be()),
+                            d: b64url_encode(&d.to_bytes_be()),
+                            p: b64url_encode(&p.to_bytes_be()),
+                            q: b64url_encode(&q.to_bytes_be()),
+                            dp: b64url_encode(&dp.to_bytes_be()),
+                            dq: b64url_encode(&dq.to_bytes_be()),
+                            qi: b64url_encode(&qi.to_bytes_be()),
+                        };
+                    }
+                }
+            }
+        }
+        panic!("failed to construct a 4096-bit composite RSA JWK");
+    }
+
+    #[test]
+    fn rejects_composite_import_factors() {
+        let err = Wallet::from_jwk(composite_jwk()).unwrap_err();
+        assert!(err.to_string().contains("prime"), "unexpected error: {err}");
     }
 
     #[test]
