@@ -1,6 +1,6 @@
 [package]
 name = "arweave-keygen"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Generate an Arweave RSA-4096 JWK wallet locally"
 license = "MIT"
