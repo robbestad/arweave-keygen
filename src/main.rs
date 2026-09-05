@@ -1,5 +1,7 @@
 use arweave_keygen::Wallet;
 use clap::{Parser, Subcommand};
+#[cfg(unix)]
+use std::fs::File;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -102,7 +104,18 @@ fn write_keyfile(path: &Path, json: &[u8]) -> Result<(), Box<dyn std::error::Err
     file.write_all(json)?;
     file.write_all(b"\n")?;
     file.sync_all()?;
+    // file.sync_all persists contents, not the new directory entry.
+    #[cfg(unix)]
+    File::open(parent_dir(path))?.sync_all()?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn parent_dir(path: &Path) -> &Path {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
 }
 
 #[cfg(test)]
